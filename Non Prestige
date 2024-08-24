@@ -1,0 +1,188 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/slf0Dev/Ocerium_Project/main/Library.lua"))()
+
+Window = Library.Main("Non Prestige Hub FF2","LeftAlt") -- change "LeftAlt" to key that you want will hide gui
+
+--tabs
+local tab1 = Window.NewTab("Main")
+
+--sections
+local sec1 = tab1.NewSection("Catching")
+local sec2 = tab1.NewSection("Player")
+local sec3 = tab1.NewSection("Visual")
+
+--toggles
+-- Function to find the closest football
+local function findClosestFootball()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    local closestFootball = nil
+    local closestDistance = math.huge
+
+    -- Search for all footballs in the workspace
+    for _, football in pairs(game.Workspace:GetChildren()) do
+        if football:IsA("Part") and football.Name == "Football" then
+            local distance = (football.Position - hrp.Position).magnitude
+            if distance < closestDistance then
+                closestDistance = distance
+                closestFootball = football
+            end
+        end
+    end
+
+    return closestFootball
+end
+
+-- Function to create the gray part
+local function createGrayPart(size)
+    local grayPart = Instance.new("Part")
+    grayPart.Size = size
+    grayPart.Transparency = 1
+    grayPart.CanCollide = false
+    grayPart.Anchored = true
+    grayPart.BrickColor = BrickColor.Gray()
+    grayPart.Parent = game.Workspace
+    return grayPart
+end
+
+-- Function to check arm collision with gray part
+local function checkArmCollision(closestFootball, grayPart)
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm")
+    local rightArm = character:FindFirstChild("Right Arm") or character:FindFirstChild("RightUpperArm")
+
+    if leftArm and rightArm then
+        local leftTouching = leftArm.Position - grayPart.Position
+        local rightTouching = rightArm.Position - grayPart.Position
+
+        if leftTouching.magnitude < grayPart.Size.X/2 and rightTouching.magnitude < grayPart.Size.X/2 then
+            closestFootball.Size = grayPart.Size
+        end
+    end
+end
+
+-- Variables
+local isMagnetEnabled = false
+local grayPartSize = Vector3.new(15, 15, 15)
+_G.Hitbox = false -- Initialize _G.Hitbox
+
+-- Create initial gray part
+local grayPart = createGrayPart(grayPartSize)
+
+-- Toggle magnet functionality
+local DisabledToggle = sec1.NewToggle("Magnet", function(bool)
+    isMagnetEnabled = bool
+end)
+
+-- Slider to adjust size of gray part and football
+local SliderNotPrecise = sec1.NewSlider("Adjust Magnet", 0, 11, false, function(value)
+    local newSize = Vector3.new(value, value, value)
+    grayPart.Size = newSize
+    grayPartSize = newSize
+end, 15)
+
+-- Toggle to show or hide hitbox
+local ShowHitboxToggle = sec1.NewToggle("Show Hitbox", function(bool)
+    _G.Hitbox = bool
+    grayPart.Transparency = _G.Hitbox and 0.5 or 1 -- Adjust transparency based on _G.Hitbox
+end)
+
+-- Main script logic
+game:GetService("RunService").RenderStepped:Connect(function()
+    if isMagnetEnabled then
+        local closestFootball = findClosestFootball()
+        
+        if closestFootball then
+            grayPart.Position = closestFootball.Position
+            checkArmCollision(closestFootball, grayPart)
+        end
+    end
+end)
+
+
+
+-- Initialize _G.Path
+_G.Path = false
+
+local grav = 28
+
+-- Function to compute the ball's position at a given time
+local function BallPosAtTime(initial_position, initial_velocity, gravity, t)
+    local predicted_position = initial_position + initial_velocity * t + 0.5 * Vector3.new(0, -gravity, 0) * t ^ 2
+    return predicted_position
+end
+
+-- Function to create parts and beams
+local function createPartsAndBeam(x0, v0, airtime, visible)
+    local parts = {}
+    local attachments = {}
+    local transparency = visible and 0.6 or 1
+    local lastAttachment = nil
+
+    for t = 0, airtime, 0.05 do
+        local POS = BallPosAtTime(x0, v0, grav, t)
+        local Part = Instance.new("Part")
+        Part.Parent = workspace
+        Part.Size = Vector3.new(3, 2, 3)
+        Part.Anchored = true
+        Part.Color = Color3.fromRGB(0, 147, 204) -- Blue color
+        Part.CanCollide = false
+        Part.Rotation = Vector3.new(90, 0, 0)
+        Part.Position = POS
+        Part.Transparency = 1
+        table.insert(parts, Part)
+
+        local attachment = Instance.new("Attachment", Part)
+        table.insert(attachments, attachment)
+
+        if lastAttachment and _G.Path then
+            local beam = Instance.new("Beam")
+            beam.Parent = Part
+            beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)) -- White color
+            beam.Texture = "rbxassetid://18231379988"
+            beam.Attachment0 = lastAttachment
+            beam.Attachment1 = attachment
+            beam.Width0 = 1.5
+            beam.Width1 = 1.5
+            beam.Transparency = NumberSequence.new(0)
+        end
+
+        lastAttachment = attachment
+    end
+    return parts
+end
+
+-- Handle when a new object is added to the workspace
+workspace.ChildAdded:Connect(function(c)
+    game:GetService("RunService").Stepped:Wait()
+    if c.Name ~= "Football" or c:IsA("Tool") then return end
+
+    local x0 = c.Position
+    local v0 = c.Velocity
+
+    local airtime = (-v0.Y - math.sqrt(v0.Y ^ 2 - 4 * 0.5 * -grav * x0.Y)) / (2 * 0.5 * -grav)
+
+    local parts = createPartsAndBeam(x0, v0, airtime, true)
+
+    task.wait(airtime + 1.75)
+
+    for _, Part in ipairs(parts) do
+        Part:Destroy()
+    end
+end)
+
+-- Toggle functionality
+local DisabledToggle = sec3.NewToggle("Ball Visualizer", function(bool)
+    _G.Path = bool
+end)
+
+
+--toggles
+local SliderNotPrecise = sec2.NewSlider("Adjust WS",20,21,false,function(value)
+    game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = value
+end,20)
+
+local SliderNotPrecise = sec2.NewSlider("Adjust JP",50,55,false,function(value)
+    game.Players.LocalPlayer.Character.Humanoid.JumpPower = value
+end,50)
